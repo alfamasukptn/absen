@@ -7,6 +7,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import shutil
+import pytz
+from datetime import datetime
+
+# --- KONFIGURASI WAKTU INDONESIA (WIB) ---
+def get_wib_time():
+    wib = pytz.timezone('Asia/Jakarta')
+    return datetime.now(wib).strftime("%H:%M:%S")
 
 # --- DATA MATA KULIAH ---
 JADWAL_MATKUL = {
@@ -23,9 +30,10 @@ JADWAL_MATKUL = {
 st.set_page_config(page_title="Auto-Absen SPADA", page_icon="🎓")
 st.title("🎓 Auto-Presensi SPADA")
 
+# --- INPUT SECTION ---
 col1, col2 = st.columns(2)
 with col1:
-    nim_input = st.text_input("NIM", placeholder="141250324")
+    nim_input = st.text_input("NIM", placeholder="Masukkan NIM")
 with col2:
     pass_input = st.text_input("Password", type="password")
 pilihan_nama = st.selectbox("Pilih Mata Kuliah:", list(JADWAL_MATKUL.keys()))
@@ -36,49 +44,63 @@ def jalankan_bot(nim, password, url, nama_matkul):
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     
-    # Deteksi otomatis path chromium dan driver di server Linux
+    # Path biner sistem untuk Streamlit Cloud
     chrome_options.binary_location = "/usr/bin/chromium"
     driver_path = shutil.which("chromedriver") or "/usr/bin/chromedriver"
 
     st.markdown("---")
-    st.write("### 📝 Log Aktivitas")
-    log_status = st.empty()
-    
+    st.write("### 📝 Log Aktivitas (WIB)")
+    log_area = st.empty()
+    logs = []
+
+    def update_log(msg):
+        logs.append(f"[{get_wib_time()}] {msg}")
+        log_area.code("\n".join(logs))
+
     try:
-        # Menggunakan driver sistem yang sesuai dengan versi browser
         service = Service(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=chrome_options)
         wait = WebDriverWait(driver, 45)
         
-        log_status.code("LOG: Membuka halaman login...")
+        # 1. LOGIN
+        update_log("Membuka halaman login SPADA...")
         driver.get("https://spada.upnyk.ac.id/login/index.php")
         
+        update_log("Mengisi kredensial login...")
         wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(nim)
         driver.find_element(By.ID, "password").send_keys(password)
         driver.find_element(By.ID, "loginbtn").click()
         
         time.sleep(5)
-        log_status.code("LOG: Berhasil masuk. Menuju link absen...")
+        update_log("Berhasil Login! Mengakses halaman mata kuliah...")
 
+        # 2. NAVIGATION
         driver.get(url)
+        update_log(f"Halaman {nama_matkul} termuat.")
         
+        # 3. ATTENDANCE
         try:
-            log_status.code("LOG: Mencari tombol kehadiran...")
+            update_log("Mencari tombol 'Submit attendance'...")
             btn_absen = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
             btn_absen.click()
             
-            log_status.code("LOG: Memilih opsi 'Hadir'...")
+            update_log("Memilih opsi kehadiran 'Hadir'...")
             xpath_hadir = "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')] | //label[contains(., 'Hadir')]"
             wait.until(EC.element_to_be_clickable((By.XPATH, xpath_hadir))).click()
             
+            update_log("Menyimpan data kehadiran...")
             driver.find_element(By.ID, "id_submitbutton").click()
-            st.success(f"✅ **Berhasil!** Presensi {nama_matkul} sukses.")
+            
+            st.success(f"✅ **Selesai!** Presensi {nama_matkul} sukses pada pukul {get_wib_time()} WIB.")
         except:
-            st.error(f"❌ Tombol absen tidak ditemukan.")
+            update_log("GAGAL: Tombol absen tidak ditemukan. Sesi mungkin belum dibuka.")
+            st.warning("Tombol absen tidak ditemukan di halaman ini.")
 
     except Exception as e:
-        st.error(f"⚠️ Terjadi kesalahan versi: {str(e)[:150]}...")
+        update_log(f"ERROR: {str(e)[:50]}...")
+        st.error("Terjadi kesalahan teknis. Pastikan file 'packages.txt' sudah berisi chromium dan chromium-driver.")
     finally:
         if 'driver' in locals():
             driver.quit()
@@ -87,4 +109,4 @@ if st.button("🚀 Jalankan Presensi"):
     if nim_input and pass_input and pilihan_nama != "Pilih Mata Kuliah":
         jalankan_bot(nim_input, pass_input, JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
     else:
-        st.warning("⚠️ Mohon lengkapi data.")
+        st.warning("⚠️ Mohon lengkapi NIM, Password, dan Mata Kuliah.")
