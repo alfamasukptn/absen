@@ -22,7 +22,6 @@ JADWAL_MATKUL = {
 
 st.set_page_config(page_title="Bot Absen SPADA", page_icon="⚡")
 st.title("⚡ Auto-Presensi SPADA")
-st.write("Masukkan NIM/Password secara manual untuk keamanan data di GitHub.")
 
 # Input Manual
 col1, col2 = st.columns(2)
@@ -38,66 +37,64 @@ def proses_absen(nim, password, url, nama_matkul):
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
     
     status = st.empty()
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        wait = WebDriverWait(driver, 15) # Timeout lebih singkat agar cepat terdeteksi jika gagal
+        wait = WebDriverWait(driver, 20) # Waktu tunggu ditambah untuk mengatasi server lambat
 
-        # 1. Login
-        status.info("⏳ Mencoba login...")
+        # 1. Tahap Login
+        status.info("⏳ Mencoba login ke SPADA...")
         driver.get("https://spada.upnyk.ac.id/login/index.php")
-        wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(nim)
-        driver.find_element(By.ID, "password").send_keys(password)
-        driver.find_element(By.ID, "loginbtn").click()
         
+        try:
+            wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(nim)
+            driver.find_element(By.ID, "password").send_keys(password)
+            driver.find_element(By.ID, "loginbtn").click()
+        except:
+            st.error("❌ Gagal Login: Kolom username/password tidak ditemukan. Cek server SPADA.")
+            return
+
         time.sleep(2)
 
-        # 2. Cek apakah halaman absen bisa dibuka
+        # 2. Tahap Buka Link Absen
         status.info(f"🔄 Membuka presensi {nama_matkul}...")
         driver.get(url)
         
-        # 3. Deteksi Tombol Absen (Poin 4)
+        # 3. Deteksi Tombol Absen Spesifik (Poin 4)
         try:
             submit_btn = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
             submit_btn.click()
         except:
-            status.empty()
-            st.error(f"❌ **Tombol Absen Tidak Ditemukan:** Sesi absen untuk **{nama_matkul}** belum dibuka oleh dosen atau sudah berakhir.")
+            st.error(f"❌ **Tombol Absen Tidak Ada:** Sesi untuk {nama_matkul} belum dibuka dosen.")
             return
 
         # 4. Pilih Hadir
-        present_option = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')]")))
-        present_option.click()
+        try:
+            present_option = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')]")))
+            present_option.click()
+            driver.find_element(By.ID, "id_submitbutton").click()
+            st.success(f"✅ **BERHASIL!** Presensi {nama_matkul} sukses.")
+        except:
+            st.error("❌ Gagal memilih opsi 'Hadir'. Mungkin format halaman berubah.")
 
-        driver.find_element(By.ID, "id_submitbutton").click()
-        status.empty()
-        st.success(f"✅ **BERHASIL!** Presensi **{nama_matkul}** sukses.")
-        
     except Exception as e:
-        status.empty()
-        st.error(f"❌ **Kesalahan Sistem:** Terjadi kendala saat memproses absen. Pastikan koneksi stabil.")
+        st.error(f"❌ **Kesalahan Sistem:** Terjadi kendala teknis (Timeout).")
     finally:
+        status.empty()
         if 'driver' in locals():
             driver.quit()
 
-# Logika Tombol & Peringatan Terdeteksi (Poin 1, 2, 3, 5)
+# Sistem Peringatan Terdeteksi (Poin 1, 2, 3, 5)
 if st.button("🚀 Jalankan Presensi", use_container_width=True):
     errors = []
-    
-    if not nim_input:
-        errors.append("NIM masih kosong.")
-    if not pass_input:
-        errors.append("Password masih kosong.")
-    if pilihan_nama == "Pilih Mata Kuliah":
-        errors.append("Mata Kuliah belum dipilih.")
+    if not nim_input: errors.append("NIM kosong.") # Poin 1
+    if not pass_input: errors.append("Password kosong.") # Poin 2
+    if pilihan_nama == "Pilih Mata Kuliah": errors.append("Matkul belum dipilih.") # Poin 3
     
     if errors:
-        # Menampilkan semua error yang terdeteksi secara campuran
         for err in errors:
-            st.warning(f"⚠️ {err}")
+            st.warning(f"⚠️ {err}") # Deteksi campuran
     else:
-        # Jika semua input valid, jalankan bot
         proses_absen(nim_input, pass_input, JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
