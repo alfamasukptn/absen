@@ -8,9 +8,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 
-# Konfigurasi Kredensial Otomatis (Hardcoded)
-NIM_USER = "141250324"
-PASS_USER = "Arveyalfap7_"
+# MENGAMBIL DATA DARI STREAMLIT SECRETS (AMAN UNTUK GITHUB PUBLIK)
+NIM_USER = st.secrets["NIM"]
+PASS_USER = st.secrets["PASSWORD"]
 
 # Data Jadwal Mata Kuliah
 JADWAL_MATKUL = {
@@ -26,9 +26,8 @@ JADWAL_MATKUL = {
 
 st.set_page_config(page_title="Auto Absen SPADA", page_icon="⚡")
 
-# Header Aplikasi
 st.title("⚡ Auto-Presensi SPADA")
-st.caption(f"Sistem Otomatis | Pengguna: {NIM_USER}")
+st.caption(f"Sistem Otomatis Terenkripsi | NIM: {NIM_USER}")
 st.divider()
 
 def proses_absen(url, nama_matkul):
@@ -38,7 +37,6 @@ def proses_absen(url, nama_matkul):
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     
-    # Placeholder untuk status progres
     status = st.empty()
     
     try:
@@ -64,7 +62,7 @@ def proses_absen(url, nama_matkul):
         submit_btn.click()
 
         # 4. Pilih Hadir
-        status.info(f"🖊️ Mengisi kehadiran 'Hadir'...")
+        status.info(f"🖊️ Mengisi kehadiran...")
         present_option = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')]")))
         present_option.click()
 
@@ -72,26 +70,16 @@ def proses_absen(url, nama_matkul):
         driver.find_element(By.ID, "id_submitbutton").click()
         
         status.empty()
-        st.success(f"✅ **BERHASIL!** Presensi untuk mata kuliah **{nama_matkul}** telah tercatat.")
+        st.success(f"✅ **BERHASIL!** Presensi **{nama_matkul}** sukses.")
 
     except Exception as e:
         status.empty()
-        st.error(f"❌ **GAGAL:** Sesi absen untuk **{nama_matkul}** belum dibuka atau sudah berakhir.")
+        st.error(f"❌ **GAGAL:** Sesi absen belum dibuka.")
     finally:
         if 'driver' in locals():
             driver.quit()
 
-# Tampilan Utama
-pilihan_nama = st.selectbox(
-    "Silakan Pilih Mata Kuliah:", 
-    list(JADWAL_MATKUL.keys()),
-    help="Bot akan langsung berjalan setelah Anda memilih mata kuliah."
-)
+pilihan_nama = st.selectbox("Pilih Mata Kuliah:", list(JADWAL_MATKUL.keys()))
 
-# Eksekusi Otomatis (Zero-Click)
 if pilihan_nama != "Pilih Mata Kuliah":
     proses_absen(JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
-
-# Footer info
-st.divider()
-st.markdown("<small>Aplikasi ini berjalan di cloud. Tidak menggunakan resource laptop Anda.</small>", unsafe_allow_html=True)
