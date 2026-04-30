@@ -7,13 +7,22 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import shutil
-import pytz
-from datetime import datetime
+import os
+
+# Penanganan impor pytz agar lebih aman
+try:
+    import pytz
+    from datetime import datetime
+except ModuleNotFoundError:
+    st.error("Modul 'pytz' tidak ditemukan. Pastikan sudah menambahkannya di requirements.txt")
 
 # --- KONFIGURASI WAKTU INDONESIA (WIB) ---
 def get_wib_time():
-    wib = pytz.timezone('Asia/Jakarta')
-    return datetime.now(wib).strftime("%H:%M:%S")
+    try:
+        wib = pytz.timezone('Asia/Jakarta')
+        return datetime.now(wib).strftime("%H:%M:%S")
+    except:
+        return time.strftime("%H:%M:%S") # Fallback jika pytz gagal
 
 # --- DATA MATA KULIAH ---
 JADWAL_MATKUL = {
@@ -44,7 +53,6 @@ def jalankan_bot(nim, password, url, nama_matkul):
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     
     # Path biner sistem untuk Streamlit Cloud
     chrome_options.binary_location = "/usr/bin/chromium"
@@ -100,7 +108,7 @@ def jalankan_bot(nim, password, url, nama_matkul):
 
     except Exception as e:
         update_log(f"ERROR: {str(e)[:50]}...")
-        st.error("Terjadi kesalahan teknis. Pastikan file 'packages.txt' sudah berisi chromium dan chromium-driver.")
+        st.error("Terjadi kesalahan teknis. Pastikan 'packages.txt' dan 'requirements.txt' sudah benar.")
     finally:
         if 'driver' in locals():
             driver.quit()
