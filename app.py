@@ -23,7 +23,8 @@ JADWAL_MATKUL = {
 st.set_page_config(page_title="Bot Absen SPADA", page_icon="🎓")
 st.title("🎓 Portal Absensi Otomatis SPADA")
 
-def proses_absen(nim, password, url, nama_matkul):
+# Fungsi Utama Presensi
+def proses_absen(nim, password, url, nama_matkul, target_url=None):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
@@ -41,49 +42,56 @@ def proses_absen(nim, password, url, nama_matkul):
         wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(nim)
         driver.find_element(By.ID, "password").send_keys(password)
         driver.find_element(By.ID, "loginbtn").click()
+        
+        time.sleep(2)
 
-        time.sleep(2) 
+        # Jika hanya ingin cek dashboard (Tombol Login Sidebar)
+        if target_url:
+            driver.get(target_url)
+            st.success("✅ Berhasil Login ke Dashboard SPADA!")
+            return
 
-        # 2. Menuju Link Absen
+        # 2. Menuju Link Absen (Tombol Jalankan Presensi)
         driver.get(url)
         st.info(f"🔄 Membuka halaman {nama_matkul}...")
 
-        # 3. Klik Submit
         submit_btn = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
         submit_btn.click()
 
-        # 4. Pilih Hadir
         present_option = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')]")))
         present_option.click()
 
-        # 5. Simpan
         driver.find_element(By.ID, "id_submitbutton").click()
         st.success(f"✅ Berhasil presensi: {nama_matkul}!")
 
     except Exception as e:
-        st.error(f"❌ Gagal: Sesi absen mungkin belum dibuka atau elemen tidak ditemukan.")
+        st.error(f"❌ Terjadi kesalahan. Pastikan password benar atau sesi absen sudah dibuka.")
     finally:
         if 'driver' in locals():
             driver.quit()
 
-# Sidebar dengan Tombol Login di bawah Password
+# Sidebar
 with st.sidebar:
     st.header("🔑 Data Akun")
     nim_input = st.text_input("NIM", value="141250324") 
     pass_input = st.text_input("Password SPADA", type="password")
     
-    # Tombol Login diletakkan di sini
-    btn_login = st.button("🚀 Jalankan Presensi", use_container_width=True)
+    # Tombol Baru: Hanya untuk Login ke Dashboard
+    if st.button("🔓 Login ke Dashboard", use_container_width=True):
+        if nim_input and pass_input:
+            proses_absen(nim_input, pass_input, "", "", target_url="https://spada.upnyk.ac.id/my/")
+        else:
+            st.warning("⚠️ Masukkan Password terlebih dahulu!")
 
-# Area Utama: Pemilihan Matkul
+# Area Utama
 st.subheader("Pilih Mata Kuliah")
 pilihan_nama = st.selectbox("Daftar Mata Kuliah Anda:", list(JADWAL_MATKUL.keys()))
 
 if pilihan_nama != "Pilih Mata Kuliah":
     st.info(f"**Matkul Terpilih:** {pilihan_nama}")
 
-# Logika ketika tombol di sidebar diklik
-if btn_login:
+# Tombol Presensi Tetap di Tempat Sebelumnya
+if st.button("🚀 Jalankan Presensi Sekarang"):
     if nim_input and pass_input and pilihan_nama != "Pilih Mata Kuliah":
         proses_absen(nim_input, pass_input, JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
     else:
