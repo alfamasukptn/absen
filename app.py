@@ -32,65 +32,55 @@ JADWAL_MATKUL = {
 
 st.set_page_config(page_title="SPADA Auto-Pilot", page_icon="⚡", layout="centered")
 
-# --- HTML & CSS CUSTOM ---
+# --- HTML & CSS CUSTOM (Premium Look) ---
 st.markdown("""
     <style>
-    /* Mengubah Background Utama */
     .stApp {
-        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+        background: radial-gradient(circle at top right, #1e1e2f, #0f0c29);
         color: #ffffff;
     }
     
-    /* Styling Card/Container */
     .main-card {
-        background: rgba(255, 255, 255, 0.05);
-        padding: 2rem;
-        border-radius: 15px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        margin-bottom: 20px;
+        background: rgba(255, 255, 255, 0.03);
+        padding: 30px;
+        border-radius: 20px;
+        border: 1px solid rgba(0, 242, 254, 0.2);
+        backdrop-filter: blur(15px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
     
-    /* Animasi Title */
     .title-text {
-        font-family: 'Inter', sans-serif;
-        font-weight: 800;
-        background: -webkit-linear-gradient(#eee, #333);
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 900;
+        letter-spacing: -1px;
+        background: linear-gradient(90deg, #00f2fe, #4facfe);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         text-align: center;
-        font-size: 40px;
-        margin-bottom: 10px;
+        font-size: 45px;
     }
 
-    /* Button Styling */
     div.stButton > button:first-child {
-        background: linear-gradient(45deg, #00f2fe 0%, #4facfe 100%);
+        width: 100%;
+        background: linear-gradient(45deg, #00c6ff, #0072ff);
         border: none;
         color: white;
-        padding: 15px 32px;
-        text-align: center;
+        padding: 18px;
         font-weight: bold;
-        font-size: 18px;
         border-radius: 12px;
-        transition: 0.3s;
-        box-shadow: 0 4px 15px rgba(0, 242, 254, 0.3);
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        transition: 0.4s;
     }
     
     div.stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0, 242, 254, 0.5);
-    }
-
-    /* Log Box Styling */
-    .stCodeBlock {
-        border-radius: 10px !important;
-        border: 1px solid #4facfe !important;
+        box-shadow: 0 0 20px rgba(0, 198, 255, 0.6);
+        transform: scale(1.02);
     }
     </style>
     
     <div class="title-text">⚡ SPADA AUTO-PILOT</div>
-    <p style="text-align: center; color: #b0b0b0;">Automated Attendance System for Management Students</p>
+    <p style="text-align: center; color: #888; margin-bottom: 30px;">Digital Presence Protocol v2.0</p>
     """, unsafe_allow_html=True)
 
 # --- INPUT SECTION ---
@@ -98,31 +88,23 @@ with st.container():
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
-        nim_input = st.text_input("NIM", placeholder="Contoh: 141250324")
+        nim_input = st.text_input("NIM Identity", placeholder="141250324")
     with col2:
-        pass_input = st.text_input("Password SPADA", type="password")
+        pass_input = st.text_input("Access Key", type="password")
     
-    pilihan_nama = st.selectbox("Pilih Mata Kuliah", list(JADWAL_MATKUL.keys()))
+    pilihan_nama = st.selectbox("Select Target Course", list(JADWAL_MATKUL.keys()))
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- JAVASCRIPT UNTUK NOTIFIKASI ---
-# (Opsional: Memberikan alert browser saat proses selesai)
-def browser_notification(msg):
-    js_code = f"alert('{msg}');"
-    st.components.v1.html(f"<script>{js_code}</script>", height=0)
-
-# --- CORE FUNCTION ---
 def jalankan_bot(nim, password, url, nama_matkul):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     
     chrome_options.binary_location = "/usr/bin/chromium"
     driver_path = shutil.which("chromedriver") or "/usr/bin/chromedriver"
 
-    st.write("### 📝 Live System Logs")
     log_area = st.empty()
     logs = []
 
@@ -133,54 +115,50 @@ def jalankan_bot(nim, password, url, nama_matkul):
     try:
         service = Service(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        wait = WebDriverWait(driver, 40)
+        wait = WebDriverWait(driver, 50) # Ditambah menjadi 50 detik
         
-        update_log("🚀 Initiating connection to SPADA...")
+        update_log("🚀 Bypassing Firewall & Connecting...")
         driver.get("https://spada.upnyk.ac.id/login/index.php")
         
-        # Deteksi Elemen Login
-        user_field = wait.until(EC.visibility_of_element_located((By.ID, "username")))
-        update_log("🔑 Injecting credentials...")
+        # Penanganan Retry Login
+        try:
+            user_field = wait.until(EC.element_to_be_clickable((By.ID, "username")))
+        except:
+            update_log("⚠️ Connection sluggish. Forcing reload...")
+            driver.refresh()
+            user_field = wait.until(EC.element_to_be_clickable((By.ID, "username")))
+
+        update_log("🔑 Credentials injected.")
         user_field.send_keys(nim)
         driver.find_element(By.ID, "password").send_keys(password)
         driver.find_element(By.ID, "loginbtn").click()
         
         time.sleep(5)
-        if "login" in driver.current_url:
-            update_log("❌ Error: Unauthorized access. Check NIM/Pass.")
-            st.error("Credential mismatch.")
-            return
-
-        update_log(f"🔓 Authorized! Accessing {nama_matkul}...")
+        update_log(f"🔓 Tunnel established to: {nama_matkul}")
         driver.get(url)
         
         try:
-            update_log("🔍 Scanning for attendance button...")
-            btn_absen = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
-            btn_absen.click()
+            # Cari tombol absen
+            btn_absen = wait.until(EC.presence_of_element_located((By.PARTIAL_LINK_TEXT, "attendance")))
+            driver.execute_script("arguments[0].click();", btn_absen) # Click via JS lebih stabil
             
-            update_log("🎯 Selecting 'Hadir' option...")
+            update_log("🎯 Scanning presence radio...")
             xpath_hadir = "//span[contains(text(), 'Hadir')] | //label[contains(., 'Hadir')]"
-            wait.until(EC.element_to_be_clickable((By.XPATH, xpath_hadir))).click()
+            target = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_hadir)))
+            driver.execute_script("arguments[0].click();", target)
             
             driver.find_element(By.ID, "id_submitbutton").click()
-            update_log("✅ Protocol Success: Data synced to SPADA.")
+            update_log("✅ DATABASE SYNCED. PRESENCE SECURED.")
             st.balloons()
-            browser_notification(f"Absen {nama_matkul} Berhasil!")
         except:
-            update_log("⚠️ Status: Button not found. You might already be checked-in.")
+            update_log("🏁 Protocol Inactive: Attendance window closed or already signed.")
 
     except Exception as e:
-        update_log(f"💥 System Crash: {str(e)[:50]}")
+        update_log(f"💥 SYSTEM OVERLOAD: Check your network/credentials.")
     finally:
         if 'driver' in locals():
             driver.quit()
 
-# --- TRIGGER ---
 if st.button("🚀 DEPLOY PROTOCOL"):
-    if nim_input and pass_input and pilihan_nama != "Pilih Mata Kuliah":
+    if nim_input and pass_input and pilihan_nama != "Pilih Mata KulIAL":
         jalankan_bot(nim_input, pass_input, JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
-    else:
-        st.warning("Please fill all required fields.")
-
-st.markdown("<p style='text-align: center; margin-top: 50px; opacity: 0.5;'>Built for UPNVY Management Students</p>", unsafe_allow_html=True)
