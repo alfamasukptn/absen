@@ -7,14 +7,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import shutil
-import os
-
-# Penanganan impor pytz agar lebih aman
-try:
-    import pytz
-    from datetime import datetime
-except ModuleNotFoundError:
-    st.error("Modul 'pytz' tidak ditemukan. Pastikan sudah menambahkannya di requirements.txt")
+import pytz
+from datetime import datetime
 
 # --- KONFIGURASI WAKTU INDONESIA (WIB) ---
 def get_wib_time():
@@ -22,7 +16,7 @@ def get_wib_time():
         wib = pytz.timezone('Asia/Jakarta')
         return datetime.now(wib).strftime("%H:%M:%S")
     except:
-        return time.strftime("%H:%M:%S") # Fallback jika pytz gagal
+        return time.strftime("%H:%M:%S")
 
 # --- DATA MATA KULIAH ---
 JADWAL_MATKUL = {
@@ -53,8 +47,9 @@ def jalankan_bot(nim, password, url, nama_matkul):
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080") # Resolusi HD agar elemen tidak tumpang tindih
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     
-    # Path biner sistem untuk Streamlit Cloud
     chrome_options.binary_location = "/usr/bin/chromium"
     driver_path = shutil.which("chromedriver") or "/usr/bin/chromedriver"
 
@@ -72,29 +67,61 @@ def jalankan_bot(nim, password, url, nama_matkul):
         driver = webdriver.Chrome(service=service, options=chrome_options)
         wait = WebDriverWait(driver, 45)
         
-        # 1. LOGIN
+        # 1. TAHAP LOGIN
         update_log("Membuka halaman login SPADA...")
         driver.get("https://spada.upnyk.ac.id/login/index.php")
         
-        update_log("Mengisi kredensial login...")
-        wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(nim)
-        driver.find_element(By.ID, "password").send_keys(password)
-        driver.find_element(By.ID, "loginbtn").click()
+        # Berikan waktu halaman untuk me-render JavaScript
+        time.sleep(4) 
         
-        time.sleep(5)
-        update_log("Berhasil Login! Mengakses halaman mata kuliah...")
+        update_log("Mengisi kredensial login...")
+        try:
+            # Gunakan visibility agar memastikan elemen benar-benar siap berinteraksi
+            user_field = wait.until(EC.visibility_of_element_located((By.ID, "username")))
+            user_field.clear()
+            user_field.send_keys(nim)
+            
+            pass_field = driver.find_element(By.ID, "password")
+            pass_field.clear()
+            pass_field.send_keys(password)
+            
+            update_log("Mengklik tombol login...")
+            time.sleep(1)
+            driver.find_element(By.ID, "loginbtn").click()
+        except Exception as e:
+            update_log("GAGAL: Kolom login tidak merespons. Mencoba memuat ulang...")
+            driver.refresh()
+            time.sleep(5)
+            # Re-attempt sederhana
+            driver.find_element(By.ID, "username").send_keys(nim)
+            driver.find_element(By.ID, "password").send_keys(password)
+            driver.find_element(By.ID, "loginbtn").click()
 
-        # 2. NAVIGATION
+        # Jeda stabilisasi setelah login
+        time.sleep(5)
+        
+        # Cek apakah login gagal (masih di halaman login)
+        if "login" in driver.current_url.lower():
+            update_log("GAGAL: Login ditolak. Periksa kembali NIM/Password Anda.")
+            st.error("Login gagal. Pastikan kredensial Anda benar.")
+            return
+
+        update_log("Berhasil Login! Menuju halaman mata kuliah...")
+
+        # 2. TAHAP NAVIGASI
         driver.get(url)
+        time.sleep(3)
         update_log(f"Halaman {nama_matkul} termuat.")
         
-        # 3. ATTENDANCE
+        # 3. TAHAP ABSENSI
         try:
             update_log("Mencari tombol 'Submit attendance'...")
+            # Menunggu tombol muncul dengan teks parsial
             btn_absen = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
             btn_absen.click()
             
             update_log("Memilih opsi kehadiran 'Hadir'...")
+            time.sleep(2)
             xpath_hadir = "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')] | //label[contains(., 'Hadir')]"
             wait.until(EC.element_to_be_clickable((By.XPATH, xpath_hadir))).click()
             
@@ -103,12 +130,12 @@ def jalankan_bot(nim, password, url, nama_matkul):
             
             st.success(f"✅ **Selesai!** Presensi {nama_matkul} sukses pada pukul {get_wib_time()} WIB.")
         except:
-            update_log("GAGAL: Tombol absen tidak ditemukan. Sesi mungkin belum dibuka.")
-            st.warning("Tombol absen tidak ditemukan di halaman ini.")
+            update_log("SELESAI: Tombol absen tidak ditemukan. Sesi mungkin belum dibuka/sudah dilakukan.")
+            st.info("Bot tidak menemukan tombol 'Submit attendance'. Silakan cek manual jika sesi seharusnya sudah buka.")
 
     except Exception as e:
-        update_log(f"ERROR: {str(e)[:50]}...")
-        st.error("Terjadi kesalahan teknis. Pastikan 'packages.txt' dan 'requirements.txt' sudah benar.")
+        update_log(f"ERROR: {str(e)[:100]}...")
+        st.error("Terjadi kesalahan teknis. Coba 'Reboot App' di dashboard Streamlit.")
     finally:
         if 'driver' in locals():
             driver.quit()
