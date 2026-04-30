@@ -47,8 +47,11 @@ def jalankan_bot(nim, password, url, nama_matkul):
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080") # Resolusi HD agar elemen tidak tumpang tindih
+    chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    
+    # Menyamarkan identitas bot
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
     
     chrome_options.binary_location = "/usr/bin/chromium"
     driver_path = shutil.which("chromedriver") or "/usr/bin/chromedriver"
@@ -65,77 +68,70 @@ def jalankan_bot(nim, password, url, nama_matkul):
     try:
         service = Service(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        wait = WebDriverWait(driver, 45)
+        wait = WebDriverWait(driver, 40)
         
-        # 1. TAHAP LOGIN
+        # 1. TAHAP LOGIN DENGAN PENGALIHAN PAKSA
         update_log("Membuka halaman login SPADA...")
         driver.get("https://spada.upnyk.ac.id/login/index.php")
         
-        # Berikan waktu halaman untuk me-render JavaScript
-        time.sleep(4) 
-        
-        update_log("Mengisi kredensial login...")
         try:
-            # Gunakan visibility agar memastikan elemen benar-benar siap berinteraksi
+            # Tunggu elemen username muncul secara visual
             user_field = wait.until(EC.visibility_of_element_located((By.ID, "username")))
-            user_field.clear()
-            user_field.send_keys(nim)
-            
-            pass_field = driver.find_element(By.ID, "password")
-            pass_field.clear()
-            pass_field.send_keys(password)
-            
-            update_log("Mengklik tombol login...")
-            time.sleep(1)
-            driver.find_element(By.ID, "loginbtn").click()
-        except Exception as e:
-            update_log("GAGAL: Kolom login tidak merespons. Mencoba memuat ulang...")
-            driver.refresh()
-            time.sleep(5)
-            # Re-attempt sederhana
-            driver.find_element(By.ID, "username").send_keys(nim)
-            driver.find_element(By.ID, "password").send_keys(password)
-            driver.find_element(By.ID, "loginbtn").click()
+        except:
+            update_log("⚠️ Halaman utama lambat. Mencoba akses alternatif...")
+            driver.get("https://spada.upnyk.ac.id/login/index.php?authmethod=manual")
+            user_field = wait.until(EC.visibility_of_element_located((By.ID, "username")))
 
-        # Jeda stabilisasi setelah login
-        time.sleep(5)
+        update_log("Mengisi kredensial...")
+        user_field.clear()
+        user_field.send_keys(nim)
         
-        # Cek apakah login gagal (masih di halaman login)
-        if "login" in driver.current_url.lower():
-            update_log("GAGAL: Login ditolak. Periksa kembali NIM/Password Anda.")
-            st.error("Login gagal. Pastikan kredensial Anda benar.")
+        pass_field = driver.find_element(By.ID, "password")
+        pass_field.clear()
+        pass_field.send_keys(password)
+        
+        time.sleep(1)
+        update_log("Mencoba Login...")
+        driver.find_element(By.ID, "loginbtn").click()
+        
+        # Cek apakah login berhasil dengan memantau URL
+        time.sleep(5)
+        if "login" in driver.current_url:
+            update_log("❌ GAGAL: Login ditolak. Periksa kembali NIM/Password.")
+            st.error("Kredensial salah atau server menolak akses.")
             return
 
-        update_log("Berhasil Login! Menuju halaman mata kuliah...")
+        update_log("✅ Login Berhasil! Mengakses mata kuliah...")
 
         # 2. TAHAP NAVIGASI
         driver.get(url)
         time.sleep(3)
-        update_log(f"Halaman {nama_matkul} termuat.")
         
         # 3. TAHAP ABSENSI
         try:
-            update_log("Mencari tombol 'Submit attendance'...")
-            # Menunggu tombol muncul dengan teks parsial
+            update_log("Mencari tombol presensi...")
+            # Coba cari tombol attendance
             btn_absen = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
             btn_absen.click()
             
-            update_log("Memilih opsi kehadiran 'Hadir'...")
+            update_log("Memilih opsi 'Hadir'...")
             time.sleep(2)
-            xpath_hadir = "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')] | //label[contains(., 'Hadir')]"
+            # XPath yang lebih kuat untuk berbagai kondisi bahasa
+            xpath_hadir = "//input[@type='radio'][following-sibling::*[contains(text(), 'Hadir') or contains(text(), 'Present')]] | //span[contains(text(), 'Hadir')] | //label[contains(., 'Hadir')]"
             wait.until(EC.element_to_be_clickable((By.XPATH, xpath_hadir))).click()
             
-            update_log("Menyimpan data kehadiran...")
+            update_log("Menyimpan kehadiran...")
             driver.find_element(By.ID, "id_submitbutton").click()
             
-            st.success(f"✅ **Selesai!** Presensi {nama_matkul} sukses pada pukul {get_wib_time()} WIB.")
+            st.success(f"🎉 Sukses! Presensi {nama_matkul} tercatat pada {get_wib_time()} WIB.")
         except:
-            update_log("SELESAI: Tombol absen tidak ditemukan. Sesi mungkin belum dibuka/sudah dilakukan.")
-            st.info("Bot tidak menemukan tombol 'Submit attendance'. Silakan cek manual jika sesi seharusnya sudah buka.")
+            update_log("🏁 Selesai: Tombol absen tidak ditemukan (Mungkin sudah absen atau belum buka).")
+            st.info("Bot tidak menemukan tombol 'Submit attendance'.")
 
     except Exception as e:
-        update_log(f"ERROR: {str(e)[:100]}...")
-        st.error("Terjadi kesalahan teknis. Coba 'Reboot App' di dashboard Streamlit.")
+        update_log(f"💥 ERROR: Terjadi gangguan pada koneksi server SPADA.")
+        with st.expander("Detail Teknis"):
+            st.write(str(e))
     finally:
         if 'driver' in locals():
             driver.quit()
@@ -144,4 +140,4 @@ if st.button("🚀 Jalankan Presensi"):
     if nim_input and pass_input and pilihan_nama != "Pilih Mata Kuliah":
         jalankan_bot(nim_input, pass_input, JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
     else:
-        st.warning("⚠️ Mohon lengkapi NIM, Password, dan Mata Kuliah.")
+        st.warning("⚠️ Lengkapi data terlebih dahulu.")
