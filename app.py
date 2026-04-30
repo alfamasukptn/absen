@@ -51,21 +51,24 @@ def proses_absen(nim, password, url, nama_matkul, target_url=None):
             st.success("✅ Berhasil Login ke Dashboard SPADA!")
             return
 
-        # 2. Menuju Link Absen (Tombol Jalankan Presensi)
+        # 2. Menuju Link Absen
         driver.get(url)
         st.info(f"🔄 Membuka halaman {nama_matkul}...")
 
+        # Klik 'Submit attendance'
         submit_btn = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
         submit_btn.click()
 
+        # Pilih 'Hadir'
         present_option = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')]")))
         present_option.click()
 
+        # Simpan
         driver.find_element(By.ID, "id_submitbutton").click()
         st.success(f"✅ Berhasil presensi: {nama_matkul}!")
 
     except Exception as e:
-        st.error(f"❌ Terjadi kesalahan. Pastikan password benar atau sesi absen sudah dibuka.")
+        st.error(f"❌ Terjadi kesalahan. Pastikan sesi absen sudah dibuka.")
     finally:
         if 'driver' in locals():
             driver.quit()
@@ -73,15 +76,12 @@ def proses_absen(nim, password, url, nama_matkul, target_url=None):
 # Sidebar
 with st.sidebar:
     st.header("🔑 Data Akun")
+    # Kredensial Anda sudah terisi otomatis
     nim_input = st.text_input("NIM", value="141250324") 
-    pass_input = st.text_input("Password SPADA", type="password")
+    pass_input = st.text_input("Password SPADA", value="Arveyalfap7_", type="password")
     
-    # Tombol Baru: Hanya untuk Login ke Dashboard
     if st.button("🔓 Login ke Dashboard", use_container_width=True):
-        if nim_input and pass_input:
-            proses_absen(nim_input, pass_input, "", "", target_url="https://spada.upnyk.ac.id/my/")
-        else:
-            st.warning("⚠️ Masukkan Password terlebih dahulu!")
+        proses_absen(nim_input, pass_input, "", "", target_url="https://spada.upnyk.ac.id/my/")
 
 # Area Utama
 st.subheader("Pilih Mata Kuliah")
@@ -90,9 +90,9 @@ pilihan_nama = st.selectbox("Daftar Mata Kuliah Anda:", list(JADWAL_MATKUL.keys(
 if pilihan_nama != "Pilih Mata Kuliah":
     st.info(f"**Matkul Terpilih:** {pilihan_nama}")
 
-# Tombol Presensi Tetap di Tempat Sebelumnya
+# Tombol Presensi
 if st.button("🚀 Jalankan Presensi Sekarang"):
-    if nim_input and pass_input and pilihan_nama != "Pilih Mata Kuliah":
+    if pilihan_nama != "Pilih Mata Kuliah":
         proses_absen(nim_input, pass_input, JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
     else:
-        st.warning("⚠️ Isi password dan pilih mata kuliah terlebih dahulu!")
+        st.warning("⚠️ Pilih mata kuliah terlebih dahulu!")
