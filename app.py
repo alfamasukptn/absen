@@ -2,14 +2,13 @@ import streamlit as st
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
-import os
+import shutil
 
-# --- KONFIGURASI DATA MATA KULIAH ---
+# --- DATA MATA KULIAH ---
 JADWAL_MATKUL = {
     "Pilih Mata Kuliah": {"link": ""},
     "EKO MAKRO": {"link": "https://spada.upnyk.ac.id/mod/attendance/view.php?id=750171"},
@@ -24,7 +23,6 @@ JADWAL_MATKUL = {
 st.set_page_config(page_title="Auto-Absen SPADA", page_icon="🎓")
 st.title("🎓 Auto-Presensi SPADA")
 
-# --- INPUT SECTION ---
 col1, col2 = st.columns(2)
 with col1:
     nim_input = st.text_input("NIM", placeholder="141250324")
@@ -39,23 +37,23 @@ def jalankan_bot(nim, password, url, nama_matkul):
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     
-    # Path khusus untuk Streamlit Cloud agar tidak Error 127
-    if os.path.exists("/usr/bin/chromium-browser"):
-        chrome_options.binary_location = "/usr/bin/chromium-browser"
+    # Deteksi otomatis path chromium dan driver di server Linux
+    chrome_options.binary_location = "/usr/bin/chromium"
+    driver_path = shutil.which("chromedriver") or "/usr/bin/chromedriver"
 
     st.markdown("---")
     st.write("### 📝 Log Aktivitas")
     log_status = st.empty()
     
     try:
-        # Penanganan Driver yang lebih stabil untuk Linux/Cloud
-        service = Service(ChromeDriverManager().install())
+        # Menggunakan driver sistem yang sesuai dengan versi browser
+        service = Service(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=chrome_options)
         wait = WebDriverWait(driver, 45)
         
-        # 1. LOGIN
         log_status.code("LOG: Membuka halaman login...")
         driver.get("https://spada.upnyk.ac.id/login/index.php")
+        
         wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(nim)
         driver.find_element(By.ID, "password").send_keys(password)
         driver.find_element(By.ID, "loginbtn").click()
@@ -63,10 +61,8 @@ def jalankan_bot(nim, password, url, nama_matkul):
         time.sleep(5)
         log_status.code("LOG: Berhasil masuk. Menuju link absen...")
 
-        # 2. NAVIGATION
         driver.get(url)
         
-        # 3. ATTENDANCE
         try:
             log_status.code("LOG: Mencari tombol kehadiran...")
             btn_absen = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
@@ -79,10 +75,10 @@ def jalankan_bot(nim, password, url, nama_matkul):
             driver.find_element(By.ID, "id_submitbutton").click()
             st.success(f"✅ **Berhasil!** Presensi {nama_matkul} sukses.")
         except:
-            st.error(f"❌ Tombol absen tidak ditemukan. Sesi mungkin belum dibuka.")
+            st.error(f"❌ Tombol absen tidak ditemukan.")
 
     except Exception as e:
-        st.error(f"⚠️ Kendala Teknis: {str(e)[:100]}...")
+        st.error(f"⚠️ Terjadi kesalahan versi: {str(e)[:150]}...")
     finally:
         if 'driver' in locals():
             driver.quit()
