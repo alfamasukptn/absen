@@ -8,10 +8,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 
-# MENGAMBIL DATA DARI STREAMLIT SECRETS (AMAN UNTUK GITHUB PUBLIK)
-NIM_USER = st.secrets["NIM"]
-PASS_USER = st.secrets["PASSWORD"]
-
 # Data Jadwal Mata Kuliah
 JADWAL_MATKUL = {
     "Pilih Mata Kuliah": {"link": ""},
@@ -24,13 +20,21 @@ JADWAL_MATKUL = {
     "PENDIDIKAN PANCASILA": {"link": "https://spada.upnyk.ac.id/mod/attendance/view.php?id=766147"}
 }
 
-st.set_page_config(page_title="Auto Absen SPADA", page_icon="⚡")
+st.set_page_config(page_title="Bot Absen SPADA", page_icon="⚡")
 
 st.title("⚡ Auto-Presensi SPADA")
-st.caption(f"Sistem Otomatis Terenkripsi | NIM: {NIM_USER}")
-st.divider()
+st.write("Masukkan NIM/Password secara manual untuk keamanan data di GitHub.")
 
-def proses_absen(url, nama_matkul):
+# Input Manual (Menggantikan st.secrets yang error)
+col1, col2 = st.columns(2)
+with col1:
+    nim_input = st.text_input("NIM", placeholder="141250324")
+with col2:
+    pass_input = st.text_input("Password", type="password")
+
+pilihan_nama = st.selectbox("Pilih Mata Kuliah:", list(JADWAL_MATKUL.keys()))
+
+def proses_absen(nim, password, url, nama_matkul):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
@@ -38,48 +42,41 @@ def proses_absen(url, nama_matkul):
     chrome_options.add_argument("--disable-gpu")
     
     status = st.empty()
-    
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         wait = WebDriverWait(driver, 20)
 
-        # 1. Login Otomatis
-        status.info(f"⏳ Sedang login ke SPADA...")
+        # Login
+        status.info("⏳ Mencoba login...")
         driver.get("https://spada.upnyk.ac.id/login/index.php")
-        wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(NIM_USER)
-        driver.find_element(By.ID, "password").send_keys(PASS_USER)
+        wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(nim)
+        driver.find_element(By.ID, "password").send_keys(password)
         driver.find_element(By.ID, "loginbtn").click()
         
         time.sleep(2)
 
-        # 2. Menuju Link Absen
+        # Presensi
         status.info(f"🔄 Membuka presensi {nama_matkul}...")
         driver.get(url)
-        
-        # 3. Klik Submit Attendance
         submit_btn = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
         submit_btn.click()
 
-        # 4. Pilih Hadir
-        status.info(f"🖊️ Mengisi kehadiran...")
         present_option = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')]")))
         present_option.click()
 
-        # 5. Simpan
         driver.find_element(By.ID, "id_submitbutton").click()
-        
         status.empty()
         st.success(f"✅ **BERHASIL!** Presensi **{nama_matkul}** sukses.")
-
     except Exception as e:
         status.empty()
-        st.error(f"❌ **GAGAL:** Sesi absen belum dibuka.")
+        st.error(f"❌ **GAGAL:** Sesi belum dibuka atau data salah.")
     finally:
         if 'driver' in locals():
             driver.quit()
 
-pilihan_nama = st.selectbox("Pilih Mata Kuliah:", list(JADWAL_MATKUL.keys()))
-
-if pilihan_nama != "Pilih Mata Kuliah":
-    proses_absen(JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
+if st.button("🚀 Jalankan Presensi", use_container_width=True):
+    if nim_input and pass_input and pilihan_nama != "Pilih Mata Kuliah":
+        proses_absen(nim_input, pass_input, JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
+    else:
+        st.warning("⚠️ Mohon lengkapi NIM, Password, dan Mata Kuliah.")
