@@ -32,7 +32,7 @@ JADWAL_MATKUL = {
 
 st.set_page_config(page_title="SPADA Auto-Pilot", page_icon="⚡", layout="centered")
 
-# --- HTML & CSS CUSTOM (Premium Look) ---
+# --- HTML & CSS CUSTOM ---
 st.markdown("""
     <style>
     .stApp {
@@ -52,7 +52,6 @@ st.markdown("""
     .title-text {
         font-family: 'Segoe UI', sans-serif;
         font-weight: 900;
-        letter-spacing: -1px;
         background: linear-gradient(90deg, #00f2fe, #4facfe);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -80,7 +79,7 @@ st.markdown("""
     </style>
     
     <div class="title-text">⚡ SPADA AUTO-PILOT</div>
-    <p style="text-align: center; color: #888; margin-bottom: 30px;">Digital Presence Protocol v2.0</p>
+    <p style="text-align: center; color: #888; margin-bottom: 30px;">Protokol Presensi Digital v2.1</p>
     """, unsafe_allow_html=True)
 
 # --- INPUT SECTION ---
@@ -88,11 +87,11 @@ with st.container():
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
-        nim_input = st.text_input("NIM Identity", placeholder="141250324")
+        nim_input = st.text_input("Identitas NIM", placeholder="Masukkan NIM Anda")
     with col2:
-        pass_input = st.text_input("Access Key", type="password")
+        pass_input = st.text_input("Kata Sandi", type="password")
     
-    pilihan_nama = st.selectbox("Select Target Course", list(JADWAL_MATKUL.keys()))
+    pilihan_nama = st.selectbox("Pilih Mata Kuliah Tujuan", list(JADWAL_MATKUL.keys()))
     st.markdown('</div>', unsafe_allow_html=True)
 
 def jalankan_bot(nim, password, url, nama_matkul):
@@ -105,6 +104,7 @@ def jalankan_bot(nim, password, url, nama_matkul):
     chrome_options.binary_location = "/usr/bin/chromium"
     driver_path = shutil.which("chromedriver") or "/usr/bin/chromedriver"
 
+    st.write("### 📝 Log Aktivitas Sistem")
     log_area = st.empty()
     logs = []
 
@@ -115,50 +115,58 @@ def jalankan_bot(nim, password, url, nama_matkul):
     try:
         service = Service(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        wait = WebDriverWait(driver, 50) # Ditambah menjadi 50 detik
+        wait = WebDriverWait(driver, 50)
         
-        update_log("🚀 Bypassing Firewall & Connecting...")
+        update_log("🚀 Menginisialisasi koneksi ke server SPADA...")
         driver.get("https://spada.upnyk.ac.id/login/index.php")
         
-        # Penanganan Retry Login
         try:
             user_field = wait.until(EC.element_to_be_clickable((By.ID, "username")))
         except:
-            update_log("⚠️ Connection sluggish. Forcing reload...")
+            update_log("⚠️ Koneksi lambat. Mencoba memuat ulang halaman...")
             driver.refresh()
             user_field = wait.until(EC.element_to_be_clickable((By.ID, "username")))
 
-        update_log("🔑 Credentials injected.")
+        update_log("🔑 Menginjeksikan kredensial pengguna...")
         user_field.send_keys(nim)
         driver.find_element(By.ID, "password").send_keys(password)
         driver.find_element(By.ID, "loginbtn").click()
         
         time.sleep(5)
-        update_log(f"🔓 Tunnel established to: {nama_matkul}")
+        if "login" in driver.current_url:
+            update_log("❌ Kegagalan Autentikasi: NIM atau Password salah.")
+            st.error("Akses ditolak oleh server.")
+            return
+
+        update_log(f"🔓 Akses diberikan. Membuka matkul: {nama_matkul}")
         driver.get(url)
         
         try:
-            # Cari tombol absen
+            update_log("🔍 Mencari modul presensi...")
             btn_absen = wait.until(EC.presence_of_element_located((By.PARTIAL_LINK_TEXT, "attendance")))
-            driver.execute_script("arguments[0].click();", btn_absen) # Click via JS lebih stabil
+            driver.execute_script("arguments[0].click();", btn_absen)
             
-            update_log("🎯 Scanning presence radio...")
+            update_log("🎯 Memilih opsi kehadiran 'Hadir'...")
             xpath_hadir = "//span[contains(text(), 'Hadir')] | //label[contains(., 'Hadir')]"
             target = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_hadir)))
             driver.execute_script("arguments[0].click();", target)
             
             driver.find_element(By.ID, "id_submitbutton").click()
-            update_log("✅ DATABASE SYNCED. PRESENCE SECURED.")
+            update_log("✅ DATA DISINKRONISASI. Presensi berhasil diamankan.")
             st.balloons()
         except:
-            update_log("🏁 Protocol Inactive: Attendance window closed or already signed.")
+            update_log("🏁 Protokol Selesai: Sesi absen tidak ditemukan atau sudah terisi.")
 
     except Exception as e:
-        update_log(f"💥 SYSTEM OVERLOAD: Check your network/credentials.")
+        update_log(f"💥 KRITIS: Terjadi gangguan sistem (Timeout/Network).")
     finally:
         if 'driver' in locals():
             driver.quit()
 
-if st.button("🚀 DEPLOY PROTOCOL"):
-    if nim_input and pass_input and pilihan_nama != "Pilih Mata KulIAL":
+if st.button("🚀 JALANKAN PROTOKOL"):
+    if nim_input and pass_input and pilihan_nama != "Pilih Mata Kuliah":
         jalankan_bot(nim_input, pass_input, JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
+    else:
+        st.warning("Mohon lengkapi seluruh data input.")
+
+st.markdown("<p style='text-align: center; margin-top: 50px; opacity: 0.5;'>Dibuat untuk Mahasiswa Manajemen UPNVY</p>", unsafe_allow_html=True)
