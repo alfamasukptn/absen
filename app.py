@@ -7,6 +7,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
+import os
 
 # --- KONFIGURASI DATA MATA KULIAH ---
 JADWAL_MATKUL = {
@@ -20,42 +21,17 @@ JADWAL_MATKUL = {
     "PENDIDIKAN PANCASILA": {"link": "https://spada.upnyk.ac.id/mod/attendance/view.php?id=766147"}
 }
 
-# --- UI/UX CONFIGURATION ---
-st.set_page_config(page_title="Auto-Absen SPADA", page_icon="🎓", layout="centered")
-
-st.markdown("""
-    <style>
-    .stButton>button {
-        width: 100%;
-        border-radius: 8px;
-        height: 3em;
-        background-color: #FF4B4B;
-        color: white;
-        font-weight: bold;
-    }
-    .status-box {
-        padding: 10px;
-        border-radius: 5px;
-        background-color: #1E1E1E;
-        border-left: 5px solid #FF4B4B;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
+st.set_page_config(page_title="Auto-Absen SPADA", page_icon="🎓")
 st.title("🎓 Auto-Presensi SPADA")
-st.write("Gunakan aplikasi ini untuk melakukan presensi otomatis tanpa menyimpan data di GitHub.")
 
 # --- INPUT SECTION ---
-with st.container():
-    col1, col2 = st.columns(2)
-    with col1:
-        nim_input = st.text_input("NIM", placeholder="Masukkan NIM")
-    with col2:
-        pass_input = st.text_input("Password", type="password", placeholder="Masukkan Password")
-    
-    pilihan_nama = st.selectbox("Pilih Mata Kuliah:", list(JADWAL_MATKUL.keys()))
+col1, col2 = st.columns(2)
+with col1:
+    nim_input = st.text_input("NIM", placeholder="141250324")
+with col2:
+    pass_input = st.text_input("Password", type="password")
+pilihan_nama = st.selectbox("Pilih Mata Kuliah:", list(JADWAL_MATKUL.keys()))
 
-# --- CORE FUNCTION (LOGIKA BOT) ---
 def jalankan_bot(nim, password, url, nama_matkul):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
@@ -63,89 +39,56 @@ def jalankan_bot(nim, password, url, nama_matkul):
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     
-    # Anti-Detection: Membuat bot terlihat seperti manusia
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_experimental_option('useAutomationExtension', False)
+    # Path khusus untuk Streamlit Cloud agar tidak Error 127
+    if os.path.exists("/usr/bin/chromium-browser"):
+        chrome_options.binary_location = "/usr/bin/chromium-browser"
 
     st.markdown("---")
     st.write("### 📝 Log Aktivitas")
     log_status = st.empty()
     
     try:
+        # Penanganan Driver yang lebih stabil untuk Linux/Cloud
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
+        wait = WebDriverWait(driver, 45)
         
-        # Override navigator.webdriver agar tidak terdeteksi
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        
-        wait = WebDriverWait(driver, 45) # Timeout cukup lama untuk server lambat
-        
-        # 1. LOGIN PHASE
-        log_status.code("LOG: Membuka halaman login SPADA...")
+        # 1. LOGIN
+        log_status.code("LOG: Membuka halaman login...")
         driver.get("https://spada.upnyk.ac.id/login/index.php")
-        
-        username_field = wait.until(EC.element_to_be_clickable((By.ID, "username")))
-        username_field.send_keys(nim)
+        wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(nim)
         driver.find_element(By.ID, "password").send_keys(password)
-        
-        time.sleep(1) # Delay kecil mirip manusia saat mengetik
         driver.find_element(By.ID, "loginbtn").click()
         
-        # Validasi Login Sederhana
-        time.sleep(4)
+        time.sleep(5)
         log_status.code("LOG: Berhasil masuk. Menuju link absen...")
 
-        # 2. NAVIGATION PHASE
+        # 2. NAVIGATION
         driver.get(url)
         
-        # 3. ATTENDANCE PHASE
-        log_status.code("LOG: Mencari tombol kehadiran...")
+        # 3. ATTENDANCE
         try:
-            # Mencari tombol 'attendance' atau 'presensi'
+            log_status.code("LOG: Mencari tombol kehadiran...")
             btn_absen = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
             btn_absen.click()
-            log_status.code("LOG: Tombol absen ditemukan!")
+            
+            log_status.code("LOG: Memilih opsi 'Hadir'...")
+            xpath_hadir = "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')] | //label[contains(., 'Hadir')]"
+            wait.until(EC.element_to_be_clickable((By.XPATH, xpath_hadir))).click()
+            
+            driver.find_element(By.ID, "id_submitbutton").click()
+            st.success(f"✅ **Berhasil!** Presensi {nama_matkul} sukses.")
         except:
-            st.error(f"❌ Tombol absen tidak ditemukan. Sesi untuk {nama_matkul} mungkin belum dibuka.")
-            return
-
-        # 4. SUBMIT PHASE
-        log_status.code("LOG: Memilih opsi 'Hadir'...")
-        # Mencari teks 'Hadir' atau 'Present' baik di span maupun label
-        xpath_hadir = "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')] | //label[contains(., 'Hadir')] | //label[contains(., 'Present')]"
-        hadir_option = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_hadir)))
-        hadir_option.click()
-        
-        time.sleep(1)
-        driver.find_element(By.ID, "id_submitbutton").click()
-        
-        log_status.empty()
-        st.success(f"✅ **Berhasil!** Presensi **{nama_matkul}** telah sukses dilakukan.")
+            st.error(f"❌ Tombol absen tidak ditemukan. Sesi mungkin belum dibuka.")
 
     except Exception as e:
-        st.error(f"⚠️ Terjadi kendala teknis: Timeout atau struktur halaman berubah.")
-        # Logging error sederhana untuk debug
-        with st.expander("Lihat detail error"):
-            st.write(str(e))
+        st.error(f"⚠️ Kendala Teknis: {str(e)[:100]}...")
     finally:
         if 'driver' in locals():
             driver.quit()
 
-# --- BUTTON TRIGGER ---
 if st.button("🚀 Jalankan Presensi"):
-    # Validasi input
-    errors = []
-    if not nim_input: errors.append("NIM belum diisi.")
-    if not pass_input: errors.append("Password belum diisi.")
-    if pilihan_nama == "Pilih Mata Kuliah": errors.append("Mata Kuliah belum dipilih.")
-    
-    if errors:
-        for err in errors:
-            st.warning(f"⚠️ {err}")
-    else:
+    if nim_input and pass_input and pilihan_nama != "Pilih Mata Kuliah":
         jalankan_bot(nim_input, pass_input, JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
-
-st.markdown("---")
-st.caption("Aplikasi ini berjalan di server cloud. Tidak menggunakan baterai atau kuota laptop Anda secara intensif.")
+    else:
+        st.warning("⚠️ Mohon lengkapi data.")
