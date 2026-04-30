@@ -8,7 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 
-# Data Jadwal Mata Kuliah
+# --- KONFIGURASI DATA MATA KULIAH ---
 JADWAL_MATKUL = {
     "Pilih Mata Kuliah": {"link": ""},
     "EKO MAKRO": {"link": "https://spada.upnyk.ac.id/mod/attendance/view.php?id=750171"},
@@ -20,116 +20,126 @@ JADWAL_MATKUL = {
     "PENDIDIKAN PANCASILA": {"link": "https://spada.upnyk.ac.id/mod/attendance/view.php?id=766147"}
 }
 
-# Konfigurasi UI/UX Streamlit
+# --- UI/UX CONFIGURATION ---
 st.set_page_config(page_title="Auto-Absen SPADA", page_icon="🎓", layout="centered")
 
-# Custom CSS untuk mempercantik tampilan
 st.markdown("""
     <style>
-    .main {
-        background-color: #0e1117;
-    }
     .stButton>button {
         width: 100%;
-        border-radius: 10px;
+        border-radius: 8px;
         height: 3em;
-        background-color: #ff4b4b;
+        background-color: #FF4B4B;
         color: white;
         font-weight: bold;
     }
-    .stTextInput>div>div>input {
-        border-radius: 10px;
+    .status-box {
+        padding: 10px;
+        border-radius: 5px;
+        background-color: #1E1E1E;
+        border-left: 5px solid #FF4B4B;
     }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🎓 Portal Absensi Otomatis")
-st.subheader("Manajemen Informatika & Bisnis")
-st.write("Silakan masukkan kredensial untuk mulai melakukan presensi otomatis.")
+st.title("🎓 Auto-Presensi SPADA")
+st.write("Gunakan aplikasi ini untuk melakukan presensi otomatis tanpa menyimpan data di GitHub.")
 
-# Input Section (Data dihapus dari kode demi keamanan GitHub)
+# --- INPUT SECTION ---
 with st.container():
     col1, col2 = st.columns(2)
     with col1:
-        nim_input = st.text_input("NIM", placeholder="Masukkan NIM Anda") 
+        nim_input = st.text_input("NIM", placeholder="Masukkan NIM")
     with col2:
-        pass_input = st.text_input("Password", type="password", placeholder="Password SPADA")
-
+        pass_input = st.text_input("Password", type="password", placeholder="Masukkan Password")
+    
     pilihan_nama = st.selectbox("Pilih Mata Kuliah:", list(JADWAL_MATKUL.keys()))
 
+# --- CORE FUNCTION (LOGIKA BOT) ---
 def jalankan_bot(nim, password, url, nama_matkul):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
     
-    # Placeholder untuk Log
-    st.info(f"🚀 Memulai bot untuk mata kuliah: **{nama_matkul}**")
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+    # Anti-Detection: Membuat bot terlihat seperti manusia
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
+
+    st.markdown("---")
+    st.write("### 📝 Log Aktivitas")
+    log_status = st.empty()
     
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        wait = WebDriverWait(driver, 45) # Mengikuti durasi tunggu bot.py yang stabil
         
-        # Step 1: Login
-        status_text.text("Menuju halaman login...")
+        # Override navigator.webdriver agar tidak terdeteksi
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        
+        wait = WebDriverWait(driver, 45) # Timeout cukup lama untuk server lambat
+        
+        # 1. LOGIN PHASE
+        log_status.code("LOG: Membuka halaman login SPADA...")
         driver.get("https://spada.upnyk.ac.id/login/index.php")
-        progress_bar.progress(20)
         
-        status_text.text("Memasukkan kredensial...")
-        wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(nim)
+        username_field = wait.until(EC.element_to_be_clickable((By.ID, "username")))
+        username_field.send_keys(nim)
         driver.find_element(By.ID, "password").send_keys(password)
+        
+        time.sleep(1) # Delay kecil mirip manusia saat mengetik
         driver.find_element(By.ID, "loginbtn").click()
-        progress_bar.progress(40)
         
-        time.sleep(3) # Jeda stabilisasi sesi
-        
-        # Step 2: Halaman Absen
-        status_text.text(f"Membuka link absen {nama_matkul}...")
+        # Validasi Login Sederhana
+        time.sleep(4)
+        log_status.code("LOG: Berhasil masuk. Menuju link absen...")
+
+        # 2. NAVIGATION PHASE
         driver.get(url)
-        progress_bar.progress(60)
         
-        # Step 3: Klik Submit
-        status_text.text("Mencari tombol kehadiran...")
+        # 3. ATTENDANCE PHASE
+        log_status.code("LOG: Mencari tombol kehadiran...")
         try:
-            # Menggunakan logika pencarian teks yang lebih luwes
+            # Mencari tombol 'attendance' atau 'presensi'
             btn_absen = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
             btn_absen.click()
-            status_text.text("Tombol absen ditemukan!")
+            log_status.code("LOG: Tombol absen ditemukan!")
         except:
             st.error(f"❌ Tombol absen tidak ditemukan. Sesi untuk {nama_matkul} mungkin belum dibuka.")
             return
 
-        progress_bar.progress(80)
+        # 4. SUBMIT PHASE
+        log_status.code("LOG: Memilih opsi 'Hadir'...")
+        # Mencari teks 'Hadir' atau 'Present' baik di span maupun label
+        xpath_hadir = "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')] | //label[contains(., 'Hadir')] | //label[contains(., 'Present')]"
+        hadir_option = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_hadir)))
+        hadir_option.click()
         
-        # Step 4: Pilih Hadir & Simpan
-        status_text.text("Memilih opsi 'Hadir'...")
-        opsi_hadir = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')]")))
-        opsi_hadir.click()
-        
+        time.sleep(1)
         driver.find_element(By.ID, "id_submitbutton").click()
-        progress_bar.progress(100)
         
-        st.success(f"✅ **Berhasil!** Presensi **{nama_matkul}** telah tercatat di sistem.")
-        status_text.empty()
+        log_status.empty()
+        st.success(f"✅ **Berhasil!** Presensi **{nama_matkul}** telah sukses dilakukan.")
 
     except Exception as e:
-        st.error(f"⚠️ Terjadi kendala teknis. Pastikan server SPADA tidak sedang down.")
+        st.error(f"⚠️ Terjadi kendala teknis: Timeout atau struktur halaman berubah.")
+        # Logging error sederhana untuk debug
+        with st.expander("Lihat detail error"):
+            st.write(str(e))
     finally:
         if 'driver' in locals():
             driver.quit()
 
-# Trigger Tombol
-if st.button("🚀 Jalankan Presensi Sekarang"):
-    # Validasi Input (Deteksi Campuran)
+# --- BUTTON TRIGGER ---
+if st.button("🚀 Jalankan Presensi"):
+    # Validasi input
     errors = []
     if not nim_input: errors.append("NIM belum diisi.")
     if not pass_input: errors.append("Password belum diisi.")
-    if pilihan_nama == "Pilih Mata Kuliah": errors.append("Anda belum memilih mata kuliah.")
+    if pilihan_nama == "Pilih Mata Kuliah": errors.append("Mata Kuliah belum dipilih.")
     
     if errors:
         for err in errors:
@@ -138,4 +148,4 @@ if st.button("🚀 Jalankan Presensi Sekarang"):
         jalankan_bot(nim_input, pass_input, JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
 
 st.markdown("---")
-st.caption("Aplikasi ini dibuat untuk membantu otomatisasi presensi mahasiswa UPNVY. Gunakan dengan bijak.")
+st.caption("Aplikasi ini berjalan di server cloud. Tidak menggunakan baterai atau kuota laptop Anda secara intensif.")
