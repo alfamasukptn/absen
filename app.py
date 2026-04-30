@@ -8,7 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 
-# Konfigurasi Kredensial Otomatis
+# Konfigurasi Kredensial Otomatis (Hardcoded)
 NIM_USER = "141250324"
 PASS_USER = "Arveyalfap7_"
 
@@ -25,8 +25,11 @@ JADWAL_MATKUL = {
 }
 
 st.set_page_config(page_title="Auto Absen SPADA", page_icon="⚡")
+
+# Header Aplikasi
 st.title("⚡ Auto-Presensi SPADA")
-st.write(f"Sistem otomatis untuk NIM: **{NIM_USER}**")
+st.caption(f"Sistem Otomatis | Pengguna: {NIM_USER}")
+st.divider()
 
 def proses_absen(url, nama_matkul):
     chrome_options = Options()
@@ -35,15 +38,16 @@ def proses_absen(url, nama_matkul):
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     
-    status_placeholder = st.empty()
+    # Placeholder untuk status progres
+    status = st.empty()
     
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         wait = WebDriverWait(driver, 20)
 
-        # Login Otomatis
-        status_placeholder.info(f"🔄 Sedang login untuk {nama_matkul}...")
+        # 1. Login Otomatis
+        status.info(f"⏳ Sedang login ke SPADA...")
         driver.get("https://spada.upnyk.ac.id/login/index.php")
         wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(NIM_USER)
         driver.find_element(By.ID, "password").send_keys(PASS_USER)
@@ -51,33 +55,43 @@ def proses_absen(url, nama_matkul):
         
         time.sleep(2)
 
-        # Menuju Link Absen
+        # 2. Menuju Link Absen
+        status.info(f"🔄 Membuka presensi {nama_matkul}...")
         driver.get(url)
         
-        # Klik Submit Attendance
+        # 3. Klik Submit Attendance
         submit_btn = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
         submit_btn.click()
 
-        # Pilih Hadir
+        # 4. Pilih Hadir
+        status.info(f"🖊️ Mengisi kehadiran 'Hadir'...")
         present_option = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')]")))
         present_option.click()
 
-        # Simpan
+        # 5. Simpan
         driver.find_element(By.ID, "id_submitbutton").click()
         
-        status_placeholder.empty()
-        st.success(f"✅ BERHASIL: Presensi {nama_matkul} sukses dilakukan!")
+        status.empty()
+        st.success(f"✅ **BERHASIL!** Presensi untuk mata kuliah **{nama_matkul}** telah tercatat.")
 
     except Exception as e:
-        status_placeholder.empty()
-        st.error(f"❌ GAGAL: Sesi absen {nama_matkul} belum tersedia atau sudah ditutup.")
+        status.empty()
+        st.error(f"❌ **GAGAL:** Sesi absen untuk **{nama_matkul}** belum dibuka atau sudah berakhir.")
     finally:
         if 'driver' in locals():
             driver.quit()
 
-# Tampilan Utama: Hanya Pilih Matkul
-pilihan_nama = st.selectbox("Pilih Mata Kuliah untuk Absen:", list(JADWAL_MATKUL.keys()))
+# Tampilan Utama
+pilihan_nama = st.selectbox(
+    "Silakan Pilih Mata Kuliah:", 
+    list(JADWAL_MATKUL.keys()),
+    help="Bot akan langsung berjalan setelah Anda memilih mata kuliah."
+)
 
-# Bot Langsung Berjalan Begitu Matkul Dipilih
+# Eksekusi Otomatis (Zero-Click)
 if pilihan_nama != "Pilih Mata Kuliah":
     proses_absen(JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
+
+# Footer info
+st.divider()
+st.markdown("<small>Aplikasi ini berjalan di cloud. Tidak menggunakan resource laptop Anda.</small>", unsafe_allow_html=True)
