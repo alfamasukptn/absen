@@ -20,100 +20,122 @@ JADWAL_MATKUL = {
     "PENDIDIKAN PANCASILA": {"link": "https://spada.upnyk.ac.id/mod/attendance/view.php?id=766147"}
 }
 
-st.set_page_config(page_title="Bot Absen SPADA", page_icon="⚡")
+# Konfigurasi UI/UX Streamlit
+st.set_page_config(page_title="Auto-Absen SPADA", page_icon="🎓", layout="centered")
 
-# Header Antarmuka
-st.title("⚡ Auto-Presensi SPADA")
-st.write("Masukkan NIM dan Password manual untuk keamanan repositori GitHub.")
+# Custom CSS untuk mempercantik tampilan
+st.markdown("""
+    <style>
+    .main {
+        background-color: #0e1117;
+    }
+    .stButton>button {
+        width: 100%;
+        border-radius: 10px;
+        height: 3em;
+        background-color: #ff4b4b;
+        color: white;
+        font-weight: bold;
+    }
+    .stTextInput>div>div>input {
+        border-radius: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-# Input Manual (Keamanan)
-col1, col2 = st.columns(2)
-with col1:
-    nim_input = st.text_input("NIM", placeholder="141250324")
-with col2:
-    pass_input = st.text_input("Password", type="password")
+st.title("🎓 Portal Absensi Otomatis")
+st.subheader("Manajemen Informatika & Bisnis")
+st.write("Silakan masukkan kredensial untuk mulai melakukan presensi otomatis.")
 
-pilihan_nama = st.selectbox("Pilih Mata Kuliah:", list(JADWAL_MATKUL.keys()))
+# Input Section (Data dihapus dari kode demi keamanan GitHub)
+with st.container():
+    col1, col2 = st.columns(2)
+    with col1:
+        nim_input = st.text_input("NIM", placeholder="Masukkan NIM Anda") 
+    with col2:
+        pass_input = st.text_input("Password", type="password", placeholder="Password SPADA")
 
-def proses_absen(nim, password, url, nama_matkul):
+    pilihan_nama = st.selectbox("Pilih Mata Kuliah:", list(JADWAL_MATKUL.keys()))
+
+def jalankan_bot(nim, password, url, nama_matkul):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920x1080")
+    chrome_options.add_argument("--window-size=1920,1080")
     
-    # Wadah Log Real-time
-    st.markdown("---")
-    st.write("### 📝 Log Aktivitas Bot")
-    status_log = st.empty()
+    # Placeholder untuk Log
+    st.info(f"🚀 Memulai bot untuk mata kuliah: **{nama_matkul}**")
+    progress_bar = st.progress(0)
+    status_text = st.empty()
     
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
+        wait = WebDriverWait(driver, 45) # Mengikuti durasi tunggu bot.py yang stabil
         
-        # Pengaturan Timeout Extra (60 Detik)
-        wait = WebDriverWait(driver, 60)
-        driver.set_page_load_timeout(60)
-
-        # LANGKAH 1: Login
-        status_log.code("LOG: Membuka halaman login SPADA...")
+        # Step 1: Login
+        status_text.text("Menuju halaman login...")
         driver.get("https://spada.upnyk.ac.id/login/index.php")
+        progress_bar.progress(20)
         
-        status_log.code("LOG: Mengisi kredensial...")
-        wait.until(EC.visibility_of_element_located((By.ID, "username"))).send_keys(nim)
+        status_text.text("Memasukkan kredensial...")
+        wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(nim)
         driver.find_element(By.ID, "password").send_keys(password)
         driver.find_element(By.ID, "loginbtn").click()
+        progress_bar.progress(40)
         
-        # Jeda 5 detik agar server SPADA sempat memproses sesi login
-        time.sleep(5)
-        status_log.code("LOG: Login Berhasil! Menuju link absensi...")
-
-        # LANGKAH 2: Buka Halaman Absen
+        time.sleep(3) # Jeda stabilisasi sesi
+        
+        # Step 2: Halaman Absen
+        status_text.text(f"Membuka link absen {nama_matkul}...")
         driver.get(url)
-        status_log.code(f"LOG: Halaman {nama_matkul} termuat.")
-
-        # LANGKAH 3: Cari Tombol Absen
-        status_log.code("LOG: Mencari tombol 'Submit attendance'...")
+        progress_bar.progress(60)
+        
+        # Step 3: Klik Submit
+        status_text.text("Mencari tombol kehadiran...")
         try:
-            # Mencari tombol dengan teks parsial untuk fleksibilitas bahasa
-            submit_btn = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
-            submit_btn.click()
-            status_log.code("LOG: Tombol absen ditemukan dan diklik.")
+            # Menggunakan logika pencarian teks yang lebih luwes
+            btn_absen = wait.until(EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "attendance")))
+            btn_absen.click()
+            status_text.text("Tombol absen ditemukan!")
         except:
-            status_log.empty()
-            st.warning(f"⚠️ **Log Akhir:** Login sukses, namun tombol absen untuk **{nama_matkul}** tidak ditemukan.")
-            st.info("Kemungkinan besar sesi absen belum dibuka oleh dosen atau sudah berakhir.")
+            st.error(f"❌ Tombol absen tidak ditemukan. Sesi untuk {nama_matkul} mungkin belum dibuka.")
             return
 
-        # LANGKAH 4: Pilih Hadir & Simpan
-        status_log.code("LOG: Memilih opsi 'Hadir'...")
-        # Menggunakan XPATH untuk mencari teks "Hadir" atau "Present"
-        present_option = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')]")))
-        present_option.click()
+        progress_bar.progress(80)
         
-        status_log.code("LOG: Menyimpan kehadiran...")
+        # Step 4: Pilih Hadir & Simpan
+        status_text.text("Memilih opsi 'Hadir'...")
+        opsi_hadir = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Hadir')] | //span[contains(text(), 'Present')]")))
+        opsi_hadir.click()
+        
         driver.find_element(By.ID, "id_submitbutton").click()
+        progress_bar.progress(100)
         
-        status_log.empty()
-        st.success(f"✅ **LOG SELESAI:** Presensi **{nama_matkul}** telah berhasil dilakukan secara otomatis!")
+        st.success(f"✅ **Berhasil!** Presensi **{nama_matkul}** telah tercatat di sistem.")
+        status_text.empty()
 
     except Exception as e:
-        status_log.empty()
-        st.error("❌ **Log Error: Timeout.**")
-        st.write("Server SPADA terlalu lambat merespons atau sedang dalam beban tinggi. Silakan coba lagi beberapa saat lagi.")
+        st.error(f"⚠️ Terjadi kendala teknis. Pastikan server SPADA tidak sedang down.")
     finally:
         if 'driver' in locals():
             driver.quit()
 
-# Tombol Eksekusi
-if st.button("🚀 Jalankan Presensi Sekarang", use_container_width=True):
-    # Validasi Input
-    if not nim_input:
-        st.warning("⚠️ NIM belum diisi.")
-    elif not pass_input:
-        st.warning("⚠️ Password belum diisi.")
-    elif pilihan_nama == "Pilih Mata Kuliah":
-        st.warning("⚠️ Silakan pilih mata kuliah terlebih dahulu.")
+# Trigger Tombol
+if st.button("🚀 Jalankan Presensi Sekarang"):
+    # Validasi Input (Deteksi Campuran)
+    errors = []
+    if not nim_input: errors.append("NIM belum diisi.")
+    if not pass_input: errors.append("Password belum diisi.")
+    if pilihan_nama == "Pilih Mata Kuliah": errors.append("Anda belum memilih mata kuliah.")
+    
+    if errors:
+        for err in errors:
+            st.warning(f"⚠️ {err}")
     else:
-        proses_absen(nim_input, pass_input, JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
+        jalankan_bot(nim_input, pass_input, JADWAL_MATKUL[pilihan_nama]["link"], pilihan_nama)
+
+st.markdown("---")
+st.caption("Aplikasi ini dibuat untuk membantu otomatisasi presensi mahasiswa UPNVY. Gunakan dengan bijak.")
